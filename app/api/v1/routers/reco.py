@@ -1,8 +1,12 @@
 from fastapi import APIRouter, Query, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.db import SessionLocal
-from app.core.models import Interaction, Item
+from app.core.models import Interaction, Item ,User
 from app.services.reco.generators.content import content_gen
+from app.services.reco.candidate_service import candidate_service
+from app.services.reco.feature_extractor import build_features
+from app.services.reco.ranker import ranker
+from app.services.reco.explanations import reason_for
 from app.api.v1.schemas.reco import HomefeedResponse, Recommendation
 from datetime import datetime, UTC
 
@@ -25,31 +29,40 @@ def homefeed(user_id: int = Query(...), db: Session = Depends(get_db)):
     )
 
     if last:
-        item = db.query(Item).get(last.item_id)
-        query_text = f"{item.title}. {item.description} [{item.community}]"
+        base_item = db.query(Item).get(last.item_id)
+        user_query_text = f"{base_item.title}. {base_item.description} [{base_item.community}]"
     else:
         # Cold-start fallback
         query_text = "Community events and services"
 
-    # 2. Get content-based candidates
-    try:
-        candidate_ids = content_gen.get_similar(query_text, top_k=20)
-    except Exception:
-        raise HTTPException(500, "Recommendation engine not ready")
+    candidates= candidate_service.get_candidates(db, user_id)
+    if not candidates:
+        candidates=candidate_service.get_candidates_for_cold_user(db, user_id)
 
-    # 3. Build the response
-    recs = []
-    for idx, iid in enumerate(candidate_ids, start=1):
-        itm = db.query(Item).get(iid)
+    # if still no candidates, return empty
+    if not candidates:
+        return HomefeedResponse(user_id=user_id, recommendations=[])
+    
+    # extract features for ranking
+    feats= build_features(db, user_query_text, candidates)
+
+    #rank candidates
+
+    ranked= ranker.rank(feats, top_k=20)
+
+    #build response with reasons
+    now= datetime.now(UTC)
+    recs =[]
+    for r in ranked:
         recs.append(Recommendation(
-            item_id=iid,
-            title=itm.title,
-            reason=f"Similar to your recent interest",
-            tags=["content-based"],
-            timestamp=datetime.now(UTC)
-            
+            item_id=r["item_id"],
+            title=r["title"],
+            reason=reason_for(r),
+            tags=r.get("sources", []),
+            timestamp=now
         ))
 
+    
     return HomefeedResponse(user_id=user_id, recommendations=recs)
 
     

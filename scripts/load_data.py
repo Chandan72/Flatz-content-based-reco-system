@@ -1,5 +1,3 @@
-# scripts/load_data.py
-
 import csv
 from datetime import datetime
 from sqlalchemy.orm import Session
