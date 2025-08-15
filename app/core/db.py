@@ -1,7 +1,7 @@
 
 
 #Base = declarative_base()  
-# app/core/db.py
+
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base

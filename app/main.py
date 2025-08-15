@@ -5,6 +5,7 @@ from app.core.db import SessionLocal
 from app.services.reco.generators.content import content_gen  # now imported from content.py
 import logging
 from app.services.reco.generators.popularity import pop_gen
+from app.api.v1.routers.feedback import router as feedback_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,6 +33,8 @@ async def health():
 
 # Include  recommendation routes
 app.include_router(reco_router, prefix="/v1/reco",tags=["reco"])
+# Include the feedback routes
+app.include_router(feedback_router, prefix="/v1/reco", tags=["feedback"])
 
 @app.get("/")
 async def root():
