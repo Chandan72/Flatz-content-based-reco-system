@@ -6,6 +6,7 @@ from typing import List, Dict, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from app.core.models import Interaction, Item
+from app.services.cache_service import cache_service
 
 @dataclass
 class PopularItem:
@@ -13,6 +14,13 @@ class PopularItem:
     score: float
 
 class PopularityCandidateGenerator:
+    async def top_k_by_community(self, community: str, k: int):
+        cached= await cache_service.get_popular_items(community)
+        if cached:
+            return cached[:k]
+        popular_items= self._calculate_popular_items(community)
+        await cache_service.set_popular_items(community, popular_items)
+        return popular_items[:k]
     """
     Computes decayed popularity scores per item, optionally scoped by community.
     Cache in memory; refresh on startup or periodic cron.

@@ -9,6 +9,7 @@ from app.services.reco.ranker import ranker
 from app.services.reco.explanations import reason_for
 from app.api.v1.schemas.reco import HomefeedResponse, Recommendation
 from app.services.reco.policy import policy_filter
+from app.services.cache_service import cache_service
 from datetime import datetime, UTC
 
 router = APIRouter()
@@ -20,7 +21,14 @@ def get_db():
         db.close()
 
 @router.get("/homefeed", response_model=HomefeedResponse)
-def homefeed(user_id: int = Query(...), db: Session = Depends(get_db)):
+async def homefeed(user_id: int = Query(...), db: Session = Depends(get_db)):
+    #Try cache first
+    cached_recommendations= await cache_service.get_recommendations(user_id)
+    if cached_recommendations:
+        return HomefeedResponse(
+            user_id=user_id,
+            recommendations=cached_recommendations
+        )
     # 1. Retrieve the user’s most recent interaction
     last = (
         db.query(Interaction)
@@ -65,8 +73,7 @@ def homefeed(user_id: int = Query(...), db: Session = Depends(get_db)):
             tags=r.get("sources", []),
             timestamp=now
         ))
+    #await cache_service.set_recommendations(user_id, final_recommendations)
 
     
     return HomefeedResponse(user_id=user_id, recommendations=recs)
-
-    

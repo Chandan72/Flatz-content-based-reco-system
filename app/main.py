@@ -7,6 +7,7 @@ import logging
 from app.services.reco.generators.popularity import pop_gen
 from app.api.v1.routers.feedback import router as feedback_router
 from app.services.reco.generators.collaborative import cf_generator
+from app.services.cache_service import cache_service
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -17,6 +18,7 @@ app = FastAPI(title="FlatZ Reco Service")
 
 @app.on_event("startup")
 def on_startup():
+    
     """
     Runs once when the server starts.
     Builds the content-based recommendation index from existing items in DB.
