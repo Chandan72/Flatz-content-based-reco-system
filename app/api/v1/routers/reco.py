@@ -8,6 +8,7 @@ from app.services.reco.feature_extractor import build_features
 from app.services.reco.ranker import ranker
 from app.services.reco.explanations import reason_for
 from app.api.v1.schemas.reco import HomefeedResponse, Recommendation
+from app.services.reco.policy import policy_filter
 from datetime import datetime, UTC
 
 router = APIRouter()
@@ -38,6 +39,9 @@ def homefeed(user_id: int = Query(...), db: Session = Depends(get_db)):
     candidates= candidate_service.get_candidates(db, user_id)
     if not candidates:
         candidates=candidate_service.get_candidates_for_cold_user(db, user_id)
+    user=db.query(User).get(user_id)
+    user_community= getattr(user, "block", None)
+    candidates=policy_filter.apply_all_policies(user_community, candidates, db)
 
     # if still no candidates, return empty
     if not candidates:
