@@ -5,6 +5,7 @@ from sqlalchemy import desc
 from app.core.models import Interaction, Item, User
 from app.services.reco.generators.content import content_gen
 from app.services.reco.generators.popularity import pop_gen
+from app.services.reco.generators.collaborative import cf_generator
 import logging
 
 logger = logging.getLogger(__name__)
@@ -142,62 +143,83 @@ class CandidateService:
         return {iid: sources for iid, sources in candidates.items() 
                 if iid not in recent_ids}
 
-    def get_candidates(self, db: Session, user_id: int) -> List[Dict]:
-        """
-        Main fusion method: combines all candidate sources into a unified pool.
-        
-        Returns:
-        List of dicts: [{"item_id": 123, "sources": ["content", "pop-comm"]}, ...]
-        
-        The "sources" field is crucial for:
-        - Explanation generation ("Similar to your recent interest" vs "Trending in your area")
-        - A/B testing and analytics 
-        - Debugging recommendation quality
-        """
+    def get_candidates(self, db:Session, user_id: int) -> List[Dict]:
+        """Main fusion method: combine all candidate sourcce into a inified pool."""
         logger.info(f"Generating candidates for user {user_id}")
-        
-        # Track candidates by item_id and their sources
-        candidate_pool: Dict[int, Set[str]] = {}
-        
-        # Step 1: Get user context
-        user = db.query(User).get(user_id)
-        recent_items = self._get_recent_user_items(db, user_id)
-        
+        # track candidates by item_id and their sources
+        candidate_pool: Dict[int, Set[str]] ={}
+
+        # 1. Cet user context
+        user= db.query(User).get(user_id)
+        recent_items= self._get_recent_user_items(db, user_id)
+
         logger.info(f"User {user_id} has {len(recent_items)} recent interactions")
-        
-        # Step 2: Generate content-based candidates
-        content_candidates = self._get_content_candidates(db, recent_items)
-        for item_id in content_candidates:
-            candidate_pool.setdefault(item_id, set()).add("content")
-        
-        logger.info(f"Added {len(content_candidates)} content-based candidates")
-        
-        # Step 3: Generate popularity-based candidates
-        comm_candidates, global_candidates = self._get_popularity_candidates(db, user)
-        
-        for item_id in comm_candidates:
-            candidate_pool.setdefault(item_id, set()).add("pop-comm")
-        
-        for item_id in global_candidates:
-            candidate_pool.setdefault(item_id, set()).add("pop-global")
-        
-        logger.info(f"Added {len(comm_candidates)} community and {len(global_candidates)} global candidates")
-        
-        # Step 4: Remove recently interacted items to increase diversity
-        candidate_pool = self._remove_recent_interactions(candidate_pool, recent_items)
-        
-        # Step 5: Convert to the format expected by downstream systems
-        result = [
-            {
+
+        # 2. Generate content-based candidates
+        try:
+            content_candidates= self._get_content_candidates(db, recent_items)
+            for item_id in content_candidates:
+                if item_id not in candidate_pool:
+                    candidate_pool[item_id]= set()
+                candidate_pool[item_id].add("content")
+            logger.info(f" Added {len(content_candidates)} content-based candidates")
+        except Exception as e:
+            logger.warning(f"Content candidate generative failed: {e}")
+
+        if recent_items and len(recent_items) >0:
+            try:
+                for item in recent_items[:2]:
+                    cf_ids= cf_generator.get_similar_items(item.id, top_k=10)
+                    for iid in cf_ids:
+                        if iid not in candidate_pool:
+                            candidate_pool[iid]=set()
+                        candidate_pool[iid].add("cf")
+
+                logger.info(f"Added CF candidates based on recent items")
+            except Exception as e:
+                logger.warning(f"CF candidates generation failed: {e}")
+        # 3.Generate popularity-based candidates
+        try:
+            comm_candidates, global_candidates= self._get_popularity_candidates(db, user)
+            for intem_id in comm_candidates:
+                if item_id not in candidate_pool:
+                    candidate_pool[item_id] =set()
+                    
+                candidate_pool[item_id].add("pop-comm")
+
+            for item_id in global_candidates:
+                if item_id not in candidate_pool:
+                    candidate_pool[item_id] = set()
+                candidate_pool[item_id].add("pop-global")
+            logger.info(f"Added {len(comm_candidates)} community and {len(global_candidates)} global candidates")
+        except Exception as e:
+            logger.warning(f"Popularity candidate generation failed: {e}")
+
+        # 4. Remove recently interacted items to increase diversity
+        try:
+            candidate_pool= self._remove_recent_interactions(candidate_pool, recent_items)
+        except Exception as e:
+            logger.warning(f"Recent interaction filtering failed: {e}")
+
+        # 5. Clean any potential None values and convert to list format
+        result=[]
+        for item_id, sources in candidate_pool.items():
+            if sources is None or not sources:
+                sources = {"fallback"}
+            
+            result.append({
                 "item_id": item_id,
-                "sources": list(sources)  # Convert set to list for JSON serialization
-            }
-            for item_id, sources in candidate_pool.items()
-        ]
-        
+                "sources": list(sources)
+            })
+
         logger.info(f"Final candidate pool: {len(result)} items")
-        
         return result
+
+
+
+
+
+
 
     def get_candidates_for_cold_user(self, db: Session, user_id: int) -> List[Dict]:
         """

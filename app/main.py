@@ -6,6 +6,7 @@ from app.services.reco.generators.content import content_gen  # now imported fro
 import logging
 from app.services.reco.generators.popularity import pop_gen
 from app.api.v1.routers.feedback import router as feedback_router
+from app.services.reco.generators.collaborative import cf_generator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,8 +24,13 @@ def on_startup():
     with SessionLocal() as db:  # context manager ensures closure
         logger.info("🚀 Building content-based FAISS index...")
         content_gen.build_index(db)
-        pop_gen.refresh(db)
+        
         logger.info("✅ Index built successfully with %d items", len(content_gen.item_ids))
+        pop_gen.refresh(db)
+        logger.info("✅ popularity ranking built successfully")
+        logger.info("Building collaborative filtering model...")
+        cf_generator.build_model(db)
+        logger.info("✅ CF model successfully")
 
 @app.get("/health")
 async def health():

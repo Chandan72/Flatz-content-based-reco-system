@@ -7,6 +7,8 @@ def reason_for(item: Dict) -> str:
     
     if "content" in sources:
         return "Similar to your recent interest"
+    elif "cf" in sources:  
+        return "People with similar tastes also liked this"
     elif "pop-comm" in sources:
         community = item.get("community", "your area")
         return f"Trending in {community}"
