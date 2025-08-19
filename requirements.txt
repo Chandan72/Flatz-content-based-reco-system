@@ -1,0 +1,24 @@
+# Web framework and ASGI server
+fastapi
+uvicorn[standard]
+
+# Database and ORM
+SQLAlchemy
+psycopg2-binary
+alembic
+
+# Data validation
+pydantic
+
+# Semantic embeddings & vector search
+sentence-transformers
+faiss-cpu
+
+# Redis caching
+redis
+# Testing
+pytest
+pytest-asyncio
+
+# Environment variable management
+python-dotenv

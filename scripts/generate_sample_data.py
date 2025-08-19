@@ -1,4 +1,4 @@
-# scripts/generate_sample_data.py
+
 """
 Generate sample data for FlatZ Reco Service
 users.csv –  id,name,block
